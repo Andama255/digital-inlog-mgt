@@ -62,8 +62,11 @@ export default function Reviews() {
       if (storedUser.role === 'academic_supervisor') {
         assignedStudents = studentUsers.filter((s: any) => s.academicSupervisorId === storedUser.id);
       } else if (storedUser.role === 'field_supervisor') {
-        // Field supervisors usually see students in their organization
-        assignedStudents = studentUsers.filter((s: any) => s.organization === storedUser.organization);
+        // Field supervisors see students explicitly assigned to them OR matching their organization
+        assignedStudents = studentUsers.filter((s: any) => 
+          s.fieldSupervisorId === storedUser.id || 
+          (s.organization && storedUser.organization && s.organization.toLowerCase() === storedUser.organization.toLowerCase())
+        );
       }
       
       setStudents(assignedStudents);

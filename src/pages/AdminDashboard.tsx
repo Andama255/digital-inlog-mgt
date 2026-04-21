@@ -112,6 +112,29 @@ export default function AdminDashboard() {
   const [selectedUserForReport, setSelectedUserForReport] = useState<string>('');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
+  // Audit Logs State
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+
+  const fetchAuditLogs = async () => {
+    setLoadingAudit(true);
+    setIsAuditModalOpen(true);
+    try {
+      const { collection, getDocs, query, orderBy, limit } = await import('firebase/firestore');
+      const q = query(collection(db, 'audit_logs'), orderBy('createdAt', 'desc'), limit(100));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAuditLogs(data);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      alert('Could not fetch audit logs.');
+      setIsAuditModalOpen(false);
+    } finally {
+      setLoadingAudit(false);
+    }
+  };
+
   useEffect(() => {
     // Real-time Users Listener
     const usersQuery = query(collection(db, 'users'));
@@ -607,14 +630,17 @@ export default function AdminDashboard() {
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">System Maintenance</p>
                 <div className="flex flex-col gap-2">
                   <button 
-                    onClick={() => alert('Audit Logs: No critical system changes detected in the last 24 hours. All administrative actions are being logged to the secure backend.')}
+                    onClick={fetchAuditLogs}
+                    disabled={loadingAudit}
                     className="w-full flex items-center gap-4 p-4 bg-gray-50 hover:bg-indigo-50 rounded-2xl transition-all group border border-transparent hover:border-indigo-100"
                   >
                     <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm text-gray-400 group-hover:text-indigo-600">
                       <Shield className="w-5 h-5" />
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-bold text-gray-900 group-hover:text-indigo-600">Audit Logs</p>
+                      <p className="text-sm font-bold text-gray-900 group-hover:text-indigo-600">
+                        {loadingAudit ? 'Loading...' : 'Audit Logs'}
+                      </p>
                       <p className="text-[10px] text-gray-500">Track system changes</p>
                     </div>
                   </button>
@@ -666,6 +692,64 @@ export default function AdminDashboard() {
           title={reportData.type === 'monthly' ? 'Monthly Activity Report' : `Activity Report: ${reportData.user?.name}`}
           data={reportData}
         />
+      )}
+
+      {/* Audit Logs Modal */}
+      {isAuditModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-3xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+          >
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">System Audit Logs</h2>
+                  <p className="text-sm text-gray-500 font-medium">Tracking administrative actions across the platform</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsAuditModalOpen(false)}
+                className="w-10 h-10 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-6 flex-1 overflow-y-auto">
+              {auditLogs.length === 0 ? (
+                <div className="text-center py-12">
+                  <Shield className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 font-medium text-lg">No audit actions recorded yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {auditLogs.map((log: any) => (
+                    <div key={log.id} className="p-4 bg-gray-50 border border-gray-100 rounded-2xl flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="px-3 py-1 bg-indigo-100 text-indigo-700 font-bold text-[10px] uppercase tracking-wider rounded-lg">
+                          {log.action}
+                        </span>
+                        <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-md">
+                          {log.createdAt ? format(log.createdAt.seconds ? new Date(log.createdAt.seconds * 1000) : new Date(log.createdAt), 'MMM dd, yyyy HH:mm') : 'N/A'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 mt-1">{log.details}</p>
+                      <div className="text-xs text-gray-400 font-medium mt-2 flex items-center gap-1 border-t border-gray-200 pt-2">
+                        <User className="w-3 h-3" />
+                        By: <span className="text-gray-600">{log.authorEmail}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );

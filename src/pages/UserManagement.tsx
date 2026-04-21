@@ -26,7 +26,7 @@ export default function UserManagement() {
   const [copiedRole, setCopiedRole] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [assignmentData, setAssignmentData] = useState({ studentId: '', supervisorId: '' });
+  const [assignmentData, setAssignmentData] = useState({ studentId: '', supervisorId: '', supervisorType: 'academic' });
   const [isAssigning, setIsAssigning] = useState(false);
   const [editFormData, setEditFormData] = useState({ 
     name: '', 
@@ -492,13 +492,13 @@ export default function UserManagement() {
               <UserPlus className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Assign Academic Supervisor</h2>
-              <p className="text-xs text-gray-500">Connect students with their university-based supervisors.</p>
+              <h2 className="text-lg font-bold text-gray-900">Assign Supervisors</h2>
+              <p className="text-xs text-gray-500">Connect students with their academic or field supervisors.</p>
             </div>
           </div>
         </div>
         <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
             <div className="space-y-2">
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Select Student</label>
               <select 
@@ -513,15 +513,26 @@ export default function UserManagement() {
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Select Academic Supervisor</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Supervisor Type</label>
+              <select 
+                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                value={assignmentData.supervisorType}
+                onChange={(e) => setAssignmentData({ ...assignmentData, supervisorType: e.target.value, supervisorId: '' })}
+              >
+                <option value="academic">Academic Supervisor</option>
+                <option value="field">Field Supervisor</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Select Supervisor</label>
               <select 
                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 value={assignmentData.supervisorId}
                 onChange={(e) => setAssignmentData({ ...assignmentData, supervisorId: e.target.value })}
               >
                 <option value="">Choose a supervisor...</option>
-                {users.filter(u => u.role === 'academic_supervisor').map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.department || 'No Dept'})</option>
+                {users.filter(u => u.role === (assignmentData.supervisorType === 'academic' ? 'academic_supervisor' : 'field_supervisor')).map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.department || s.organization || 'No Dept/Org'})</option>
                 ))}
               </select>
             </div>
@@ -537,12 +548,19 @@ export default function UserManagement() {
                 const supervisor = users.find(u => u.id === assignmentData.supervisorId);
 
                 try {
-                  await updateUser(assignmentData.studentId, {
-                    academicSupervisorId: assignmentData.supervisorId,
-                    academicSupervisorName: supervisor.name
-                  });
-                  setSuccessMessage(`Assigned ${supervisor.name} to ${student.name}`);
-                  setAssignmentData({ studentId: '', supervisorId: '' });
+                  const updatePayload = assignmentData.supervisorType === 'academic' 
+                    ? {
+                        academicSupervisorId: assignmentData.supervisorId,
+                        academicSupervisorName: supervisor.name
+                      }
+                    : {
+                        fieldSupervisorId: assignmentData.supervisorId,
+                        fieldSupervisorName: supervisor.name
+                      }
+
+                  await updateUser(assignmentData.studentId, updatePayload);
+                  setSuccessMessage(`Assigned ${supervisor.name} as ${assignmentData.supervisorType} supervisor to ${student.name}`);
+                  setAssignmentData({ studentId: '', supervisorId: '', supervisorType: assignmentData.supervisorType });
                 } catch (err) {
                   console.error('Failed to assign supervisor', err);
                   setErrorMessage('Failed to assign supervisor. Please try again.');

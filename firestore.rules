@@ -59,7 +59,18 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (
+        isOwner(userId) || 
+        isAdmin() ||
+        (hasRole('field_supervisor') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['internshipRole', 'department'])) ||
+        (hasRole('academic_supervisor') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['internshipRole', 'department']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /supervisor_feedback/{feedbackId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.studentId || hasRole('field_supervisor') || hasRole('academic_supervisor') || isAdmin());
+      allow create: if isAuthenticated() && (hasRole('field_supervisor') || hasRole('academic_supervisor') || isAdmin());
       allow delete: if isAdmin();
     }
 
@@ -99,6 +110,12 @@ service cloud.firestore {
     match /sent_notifications/{notificationId} {
       allow read: if isAuthenticated() && (isOwner(resource.data.senderId) || isAdmin());
       allow create: if isAuthenticated() && (hasRole('field_supervisor') || hasRole('academic_supervisor') || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
       allow delete: if isAdmin();
     }
   }

@@ -23,7 +23,7 @@ async function initializeFirebaseAdmin() {
 
   const envProjectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
   const configProjectId = firebaseConfig.projectId;
-  const targetProjectId = envProjectId || configProjectId;
+  const targetProjectId = configProjectId || envProjectId;
 
   try {
     console.log(`[Server] Initializing Firebase Admin. Env Project: ${envProjectId}, Config Project: ${configProjectId}`);
@@ -165,6 +165,7 @@ async function startServer() {
     { id: '6', name: 'Vincent Andama (Alt)', email: 'andamavincent941@gmail.com', role: 'admin', password: 'password123', phoneNumber: '+256700000006' },
     { id: '7', name: 'Student User', email: 'ar6343@students.ucu.ac.ug', role: 'student', password: 'password123', accessNumber: 'AR6343', phoneNumber: '+256700000007' },
     { id: '8', name: 'Student Test', email: 'ar6159@students.ucu.ac.ug', role: 'student', password: 'password123', accessNumber: 'AR6159', phoneNumber: '+256700000008' },
+    { id: '9', name: 'User 7107102', email: 'p7107102@gmail.com', role: 'student', password: 'password123', phoneNumber: '+256700000009', accessNumber: 'P7107102' },
   ];
   console.log(`[Server] Initialized with ${users.length} mock users.`);
 
@@ -245,6 +246,56 @@ async function startServer() {
 
   // --- API Routes ---
 
+  // System Audit Logger
+  async function logSystemAudit(action: string, details: string, authorUid: string, authorEmail: string) {
+    try {
+      await db.collection('audit_logs').add({
+        action,
+        details,
+        authorUid,
+        authorEmail,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      console.log(`[Audit] ${action} logged successfully.`);
+    } catch (e: any) {
+      console.error(`[Audit] Failed to log audit action: ${action}`, e);
+    }
+  }
+
+  // Get Audit Logs
+  app.get('/api/test-audit-logs', async (req, res) => {
+    try {
+      const auditSnapshot = await db.collection('audit_logs').orderBy('createdAt', 'desc').limit(10).get();
+      res.json(auditSnapshot.docs.map(doc => doc.data()));
+    } catch (e: any) {
+      res.status(500).json({ status: 'error', message: e.message, code: e.code, stack: e.stack });
+    }
+  });
+
+  app.get('/api/admin/audit-logs', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    try {
+      const decodedToken = await auth.verifyIdToken(idToken);
+      const requesterDoc = await db.collection('users').doc(decodedToken.uid).get();
+      const requesterData = requesterDoc.data();
+      
+      if (requesterData?.role !== 'admin' && decodedToken.email !== 'vincentandama96@gmail.com' && decodedToken.email !== 'andamavincent941@gmail.com') {
+        return res.status(403).json({ message: 'Forbidden: Admin access required' });
+      }
+
+      const auditSnapshot = await db.collection('audit_logs').orderBy('createdAt', 'desc').limit(100).get();
+      const auditLogs = auditSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      res.json(auditLogs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // User Deletion (Hard Delete from Auth and Firestore)
   app.delete('/api/users/:uid', async (req, res) => {
     const { uid } = req.params;
@@ -312,48 +363,62 @@ async function startServer() {
       } catch (firestoreError: any) {
         console.warn(`[Admin API] Firestore delete failed for ${uid}:`, firestoreError.message);
         
-        // If it was a permission error, try both (default) and the named database
-        const dbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)' ? firebaseConfig.firestoreDatabaseId : undefined;
-        
-        if (firestoreError.code === 7 || firestoreError.message.includes('PERMISSION_DENIED')) {
-          console.log(`[Admin API] Permission Denied. Attempting multi-database deletion strategy...`);
-          
-          let deleted = false;
-          
-          // Try (default) database
-          try {
-            console.log(`[Admin API] Trying (default) database...`);
-            const defaultDb = admin.firestore(firebaseApp);
-            await defaultDb.collection('users').doc(uid).delete();
-            console.log(`[Admin API] User ${uid} deleted from (default) Firestore instance`);
-            deleted = true;
-          } catch (defaultErr: any) {
-            console.warn(`[Admin API] (default) database delete failed:`, defaultErr.message);
-          }
-          
-          // Try named database if it exists and we haven't succeeded yet
-          if (!deleted && dbId) {
-            try {
-              console.log(`[Admin API] Trying named database: ${dbId}...`);
-              const namedDb = getFirestore(firebaseApp, dbId);
-              await namedDb.collection('users').doc(uid).delete();
-              console.log(`[Admin API] User ${uid} deleted from named Firestore instance: ${dbId}`);
-              deleted = true;
-            } catch (namedErr: any) {
-              console.warn(`[Admin API] Named database delete failed:`, namedErr.message);
-            }
-          }
-          
-          if (!deleted) {
-            console.error(`[Admin API] All Firestore deletion attempts failed for ${uid}`);
-            throw new Error(`Firestore deletion failed: Permission Denied on all attempted database instances. Please ensure the Service Account has "Cloud Datastore User" or "Firebase Firestore Admin" role.`);
-          }
+        // If the database or document is not found, treat it as a success since the goal is deletion
+        if (firestoreError.code === 5 || (firestoreError.message && firestoreError.message.includes('NOT_FOUND'))) {
+          console.log(`[Admin API] Firestore database or document not found for ${uid}. Proceeding as success since Auth was deleted.`);
         } else {
-          throw new Error(`Auth delete may have succeeded, but Firestore delete failed: ${firestoreError.message}`);
+          // If it was a permission error, try both (default) and the named database
+          const dbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)' ? firebaseConfig.firestoreDatabaseId : undefined;
+          
+          if (firestoreError.code === 7 || (firestoreError.message && firestoreError.message.includes('PERMISSION_DENIED'))) {
+            console.log(`[Admin API] Permission Denied. Attempting multi-database deletion strategy...`);
+            
+            let deleted = false;
+            
+            // Try (default) database
+            try {
+              console.log(`[Admin API] Trying (default) database...`);
+              const defaultDb = admin.firestore(firebaseApp);
+              await defaultDb.collection('users').doc(uid).delete();
+              console.log(`[Admin API] User ${uid} deleted from (default) Firestore instance`);
+              deleted = true;
+            } catch (defaultErr: any) {
+              console.warn(`[Admin API] (default) database delete failed:`, defaultErr.message);
+              if (defaultErr.code === 5 || (defaultErr.message && defaultErr.message.includes('NOT_FOUND'))) {
+                deleted = true; // Assume success if not found
+                console.log(`[Admin API] (default) database not found. Assuming success.`);
+              }
+            }
+            
+            // Try named database if it exists and we haven't succeeded yet
+            if (!deleted && dbId) {
+              try {
+                console.log(`[Admin API] Trying named database: ${dbId}...`);
+                const namedDb = getFirestore(firebaseApp, dbId);
+                await namedDb.collection('users').doc(uid).delete();
+                console.log(`[Admin API] User ${uid} deleted from named Firestore instance: ${dbId}`);
+                deleted = true;
+              } catch (namedErr: any) {
+                console.warn(`[Admin API] Named database delete failed:`, namedErr.message);
+                if (namedErr.code === 5 || (namedErr.message && namedErr.message.includes('NOT_FOUND'))) {
+                  deleted = true; // Assume success if not found
+                  console.log(`[Admin API] Named database not found. Assuming success.`);
+                }
+              }
+            }
+            
+            if (!deleted) {
+              console.error(`[Admin API] All Firestore deletion attempts failed for ${uid}`);
+              throw new Error(`Firestore deletion failed: Permission Denied on all attempted database instances. Please ensure the Service Account has "Cloud Datastore User" or "Firebase Firestore Admin" role.`);
+            }
+          } else {
+            throw new Error(`Auth delete may have succeeded, but Firestore delete failed: ${firestoreError.message}`);
+          }
         }
       }
 
       res.json({ message: 'User successfully deleted from Auth and Firestore' });
+      await logSystemAudit('DELETE_USER', `Deleted user ${uid}`, decodedToken.uid, decodedToken.email || 'unknown');
     } catch (error: any) {
       console.error('[Admin API] Error deleting user:', error);
       // Return a more descriptive error message to the frontend
@@ -450,6 +515,7 @@ async function startServer() {
         message: `Cleanup complete. Processed ${results.total} users. Success: ${results.success}, Failed: ${results.failed}`,
         results 
       });
+      await logSystemAudit('CLEANUP_DELETED_USERS', `Cleaned up ${results.success} soft-deleted users.`, decodedToken.uid, decodedToken.email || 'unknown');
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -508,6 +574,7 @@ async function startServer() {
       attendance.length = 0;
 
       res.json({ message: 'Logs and attendance cleared successfully', results });
+      await logSystemAudit('CLEANUP_ALL_LOGS', `Deleted ${results.logsDeleted} logs and ${results.attendanceDeleted} attendance records.`, decodedToken.uid, decodedToken.email || 'unknown');
     } catch (error: any) {
       console.error('[Admin API] Logs cleanup error:', error);
       res.status(500).json({ message: 'Cleanup failed', error: error.message });
@@ -557,6 +624,7 @@ async function startServer() {
       logs.push(...remainingLogs);
 
       res.json({ message: 'Pending logs cleared', results });
+      await logSystemAudit('CLEAR_PENDING_LOGS', `Cleared ${results.pendingLogsDeleted} pending logs.`, decodedToken.uid, decodedToken.email || 'unknown');
     } catch (error: any) {
       console.error('[Admin API] Clear pending logs error:', error);
       res.status(500).json({ message: 'Failed to clear pending logs', error: error.message });

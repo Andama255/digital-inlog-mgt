@@ -58,9 +58,9 @@ export default function ReportModal({ isOpen, onClose, title, data, autoDownload
       doc.setTextColor(31, 41, 55);
       doc.text('Summary Statistics', 14, 65);
       
-      const statsRows = Object.entries(data.stats).map(([key, value]) => [
+      const statsRows = Object.entries(data.stats || {}).map(([key, value]) => [
         key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
-        String(value)
+        value != null ? String(value) : '0'
       ]);
 
       autoTable(doc, {
@@ -76,11 +76,11 @@ export default function ReportModal({ isOpen, onClose, title, data, autoDownload
       doc.setFontSize(14);
       doc.text('Activity Logs', 14, finalY + 15);
 
-      const logRows = data.logs.map(log => [
-        format(log.createdAt?.seconds ? new Date(log.createdAt.seconds * 1000) : new Date(log.createdAt), 'MMM dd, HH:mm'),
-        log.activityType || 'N/A',
-        log.description || 'No description',
-        log.status || 'N/A'
+      const logRows = (data.logs || []).map(log => [
+        log.createdAt ? format((log.createdAt.seconds || log.createdAt._seconds) ? new Date((log.createdAt.seconds || log.createdAt._seconds) * 1000) : new Date(log.createdAt), 'MMM dd, HH:mm') : 'N/A',
+        log.activityType ? String(log.activityType) : 'N/A',
+        log.description ? String(log.description) : 'No description',
+        log.status ? String(log.status) : 'N/A'
       ]);
 
       autoTable(doc, {
@@ -188,7 +188,7 @@ export default function ReportModal({ isOpen, onClose, title, data, autoDownload
                       data.logs.map((log, idx) => (
                         <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-4 py-3 text-xs text-gray-600">
-                            {format(log.createdAt?.seconds ? new Date(log.createdAt.seconds * 1000) : new Date(log.createdAt), 'MMM dd, HH:mm')}
+                            {log.createdAt ? format((log.createdAt.seconds || log.createdAt._seconds) ? new Date((log.createdAt.seconds || log.createdAt._seconds) * 1000) : new Date(log.createdAt), 'MMM dd, HH:mm') : 'N/A'}
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-xs font-bold text-gray-900">{log.activityType || 'N/A'}</span>
