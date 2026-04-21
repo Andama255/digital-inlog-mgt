@@ -23,7 +23,6 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 export default function Reviews() {
   const [user, setUser] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
-  const [pendingLogs, setPendingLogs] = useState<any[]>([]);
   const [allLogs, setAllLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -10,7 +10,6 @@ export default function SupervisorDashboard() {
   const [user, setUser] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [allLogs, setAllLogs] = useState<any[]>([]);
-  const [pendingLogs, setPendingLogs] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [feedbacks, setFeedbacks] = useState<Record<string, string>>({});
@@ -67,14 +66,6 @@ export default function SupervisorDashboard() {
     const unsubscribeLogs = onSnapshot(collection(db, 'logs'), (snapshot) => {
       const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setAllLogs(logsData);
-      
-      if (storedUser.role === 'field_supervisor') {
-        setPendingLogs(logsData.filter((l: any) => l.fieldStatus === 'pending'));
-      } else if (storedUser.role === 'academic_supervisor') {
-        setPendingLogs(logsData.filter((l: any) => l.academicStatus === 'pending'));
-      } else {
-        setPendingLogs(logsData.filter((l: any) => l.status === 'pending'));
-      }
     }, (err) => {
       console.error('Logs snapshot error:', err);
       setError('Failed to load logs. Please check your permissions.');
@@ -88,6 +79,16 @@ export default function SupervisorDashboard() {
 
   const isField = user?.role === 'field_supervisor';
   const isAcademic = user?.role === 'academic_supervisor';
+
+  // Derived state for pending logs to ensure it only includes assigned students
+  const pendingLogs = allLogs.filter(log => {
+    const isAssignedStudent = students.some(s => s.id === log.studentId);
+    if (!isAssignedStudent) return false;
+
+    if (isField) return log.fieldStatus === 'pending';
+    if (isAcademic) return log.academicStatus === 'pending';
+    return log.status === 'pending';
+  });
 
   useEffect(() => {
     if (successMessage) {
@@ -145,7 +146,6 @@ export default function SupervisorDashboard() {
 
       await updateLog(logId, updateData);
       setSuccessMessage('Log entry approved successfully!');
-      setPendingLogs(pendingLogs.filter(log => log.id !== logId));
       setAllLogs(allLogs.map(log => log.id === logId ? { ...log, ...updateData } : log));
       
       const newFeedbacks = { ...feedbacks };
@@ -194,7 +194,6 @@ export default function SupervisorDashboard() {
 
       await updateLog(logId, updateData);
       setSuccessMessage('Log entry rejected successfully.');
-      setPendingLogs(pendingLogs.filter(log => log.id !== logId));
       setAllLogs(allLogs.map(log => log.id === logId ? { ...log, ...updateData } : log));
       
       const newFeedbacks = { ...feedbacks };
