@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function hasRole(role) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "vincentandama96@gmail.com" || 
+         request.auth.token.email == "andamavincent941@gmail.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'name', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.name is string &&
+             data.role in ['student', 'field_supervisor', 'academic_supervisor', 'admin'] &&
+             data.name.size() < 100 &&
+             data.email.size() < 100 &&
+             (!('deleted' in data) || data.deleted is bool);
+    }
+
+    function isValidLog(data) {
+      return data.keys().hasAll(['studentId', 'date', 'activity', 'status']) &&
+             data.studentId is string &&
+             data.date is string &&
+             data.activity is string &&
+             data.status in ['pending', 'approved', 'rejected', 'field_approved'] &&
+             data.activity.size() < 5000;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /logs/{logId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.studentId || hasRole('field_supervisor') || hasRole('academic_supervisor') || isAdmin());
+      allow create: if isAuthenticated() && isValidLog(request.resource.data) && (request.auth.uid == request.resource.data.studentId || isAdmin());
+      allow update: if isAuthenticated() && isValidLog(request.resource.data) && 
+                    (
+                      (request.auth.uid == resource.data.studentId && request.resource.data.status == resource.data.status) || 
+                      hasRole('field_supervisor') || 
+                      hasRole('academic_supervisor') || 
+                      isAdmin()
+                    );
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.studentId || hasRole('field_supervisor') || hasRole('academic_supervisor') || isAdmin());
+      allow write: if isAuthenticated() && (
+        (hasRole('student') && request.resource.data.studentId == request.auth.uid) || 
+        isAdmin()
+      );
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.userId) || isAdmin());
+      allow create: if isAuthenticated() && 
+                    (
+                      isAdmin() || 
+                      ((hasRole('field_supervisor') || hasRole('academic_supervisor')) && request.resource.data.type == 'log_status')
+                    );
+      allow update: if isAuthenticated() && isOwner(resource.data.userId) && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'deleted']);
+      allow delete: if isAdmin();
+    }
+
+    match /sent_notifications/{notificationId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.senderId) || isAdmin());
+      allow create: if isAuthenticated() && (hasRole('field_supervisor') || hasRole('academic_supervisor') || isAdmin());
+      allow delete: if isAdmin();
+    }
+  }
+}

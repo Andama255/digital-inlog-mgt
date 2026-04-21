@@ -1,11 +1,29 @@
-<div align="center">
+# Digital Internship Logbook Management System
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+This project is a comprehensive management system for tracking student internships, daily logs, and supervisor evaluations.
 
-  <h1>Built with AI Studio</h2>
+## Features
+- **Role-Based Access Control**: Student, Agency Supervisor, Academic Supervisor, and Admin.
+- **Daily Logbook**: Students can submit daily activities.
+- **Supervisor Review**: Supervisors can approve/reject logs and provide feedback.
+- **Admin Management**: Full user and system administration.
+- **Real-time Updates**: Mock API integration with Express backend.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Tech Stack
+- **Frontend**: React JS, Tailwind CSS, Lucide Icons, Framer Motion.
+- **Backend**: Express.js (Simulating Django REST Framework).
+- **Database**: In-memory mock database (Simulating MySQL).
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## How to Run
+1. The system starts automatically in the AI Studio preview.
+2. Use the following credentials to log in:
+   - **Student**: `john@example.com` / `password123`
+   - **Agency Supervisor**: `smith@agency.com` / `password123`
+   - **Academic Supervisor**: `academic@uni.edu` / `password123`
+   - **Admin**: `admin@system.com` / `password123`
 
-</div>
+## Project Structure
+- `/src/pages`: Main dashboard views for each role.
+- `/src/components`: Reusable UI components and Layout.
+- `/src/services`: API communication layer.
+- `server.ts`: Express backend serving the React app and API.
